@@ -37,7 +37,10 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ user, onNavigate, o
             </div>
             
             <div className="flex items-center space-x-4">
-              <button className="relative p-2 text-gray-600 hover:text-gray-900 transition-colors">
+              <button 
+                onClick={() => onNavigate('notifications')}
+                className="relative p-2 text-gray-600 hover:text-gray-900 transition-colors"
+              >
                 <Bell className="h-6 w-6" />
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
                   3
@@ -49,9 +52,12 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ user, onNavigate, o
                   <p className="text-sm font-medium text-gray-900">{user.name}</p>
                   <p className="text-xs text-gray-600">Patient ID: {user.id}</p>
                 </div>
-                <div className="bg-gray-100 p-2 rounded-full">
+                <button
+                  onClick={() => onNavigate('profile')}
+                  className="bg-gray-100 p-2 rounded-full hover:bg-gray-200 transition-colors"
+                >
                   <User className="h-6 w-6 text-gray-600" />
-                </div>
+                </button>
               </div>
               
               <button

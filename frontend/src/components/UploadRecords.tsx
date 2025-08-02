@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Upload, FileText, Image, File, X, Plus } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, Image, File, X, Plus, AlertCircle, CheckCircle } from 'lucide-react';
 import { PatientUser, MedicalRecord } from '../App';
+import { useAuth } from '../contexts/AuthContext';
 
 interface UploadRecordsProps {
   user: PatientUser;
@@ -8,8 +9,12 @@ interface UploadRecordsProps {
 }
 
 const UploadRecords: React.FC<UploadRecordsProps> = ({ user, onBack }) => {
+  const { updateUserProfile } = useAuth();
   const [dragActive, setDragActive] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string>('');
+  const [success, setSuccess] = useState<string>('');
   const [recordData, setRecordData] = useState({
     title: '',
     category: 'other' as MedicalRecord['category'],
@@ -56,22 +61,42 @@ const UploadRecords: React.FC<UploadRecordsProps> = ({ user, onBack }) => {
     setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (uploadedFiles.length === 0 && !recordData.notes) {
-      alert('Please upload files or add notes');
+      setError('Please upload files or add notes');
       return;
     }
 
-    // Simulate upload process
-    console.log('Uploading records:', { recordData, files: uploadedFiles });
-    
-    // Reset form
-    setRecordData({ title: '', category: 'other', notes: '' });
-    setUploadedFiles([]);
-    
-    alert('Records uploaded successfully!');
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      // Create medical record
+      const medicalRecord: MedicalRecord = {
+        id: Date.now().toString(),
+        type: uploadedFiles.length > 0 ? (uploadedFiles[0].type.startsWith('image/') ? 'image' : 'pdf') : 'text',
+        title: recordData.title,
+        content: recordData.notes || 'No additional notes',
+        uploadDate: new Date().toISOString().split('T')[0],
+        category: recordData.category
+      };
+
+      // Add to user's medical records
+      const updatedRecords = [...user.medicalRecords, medicalRecord];
+      await updateUserProfile({ medicalRecords: updatedRecords });
+
+      // Reset form
+      setRecordData({ title: '', category: 'other', notes: '' });
+      setUploadedFiles([]);
+      setSuccess('Medical record uploaded successfully!');
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const getFileIcon = (file: File) => {
@@ -106,6 +131,25 @@ const UploadRecords: React.FC<UploadRecordsProps> = ({ user, onBack }) => {
       </header>
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Alerts */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center">
+              <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+              <span className="text-red-800 text-sm">{error}</span>
+            </div>
+          </div>
+        )}
+
+        {success && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center">
+              <CheckCircle className="h-5 w-5 text-green-400 mr-2" />
+              <span className="text-green-800 text-sm">{success}</span>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Record Information */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -238,14 +282,16 @@ const UploadRecords: React.FC<UploadRecordsProps> = ({ user, onBack }) => {
               type="button"
               onClick={onBack}
               className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+              disabled={isLoading}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+              className="px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+              disabled={isLoading}
             >
-              Upload Records
+              {isLoading ? 'Uploading...' : 'Upload Records'}
             </button>
           </div>
         </form>

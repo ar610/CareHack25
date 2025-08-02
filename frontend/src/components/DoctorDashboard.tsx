@@ -6,9 +6,10 @@ interface DoctorDashboardProps {
   user: Doctor;
   onPatientSelect: (patient: Patient) => void;
   onLogout: () => void;
+  onNavigate: (screen: string) => void;
 }
 
-const DoctorDashboard: React.FC<DoctorDashboardProps> = ({ user, onPatientSelect, onLogout }) => {
+const DoctorDashboard: React.FC<DoctorDashboardProps> = ({ user, onPatientSelect, onLogout, onNavigate }) => {
   const [patientId, setPatientId] = useState('');
   const [patientKey, setPatientKey] = useState('');
   const [searchError, setSearchError] = useState('');
@@ -71,6 +72,16 @@ const DoctorDashboard: React.FC<DoctorDashboardProps> = ({ user, onPatientSelect
             </div>
             
             <div className="flex items-center space-x-4">
+              <button 
+                onClick={() => onNavigate('notifications')}
+                className="relative p-2 text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                <Bell className="h-6 w-6" />
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                  2
+                </span>
+              </button>
+              
               <div className="flex items-center space-x-2 bg-green-100 px-3 py-1 rounded-full">
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                 <span className="text-sm font-medium text-green-800">Verified</span>
@@ -81,9 +92,12 @@ const DoctorDashboard: React.FC<DoctorDashboardProps> = ({ user, onPatientSelect
                   <p className="text-sm font-medium text-gray-900">{user.name}</p>
                   <p className="text-xs text-gray-600">License: {user.licenseNumber}</p>
                 </div>
-                <div className="bg-gray-100 p-2 rounded-full">
+                <button
+                  onClick={() => onNavigate('profile')}
+                  className="bg-gray-100 p-2 rounded-full hover:bg-gray-200 transition-colors"
+                >
                   <User className="h-6 w-6 text-gray-600" />
-                </div>
+                </button>
               </div>
               
               <button

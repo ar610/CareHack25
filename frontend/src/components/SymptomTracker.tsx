@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Plus, Activity, Calendar, AlertCircle, TrendingUp } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Plus, Activity, Calendar, AlertCircle, TrendingUp, Edit3, Trash2, CheckCircle } from 'lucide-react';
 import { PatientUser, Symptom } from '../App';
+import { useAuth } from '../contexts/AuthContext';
+import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { db } from '../firebase/config';
 
 interface SymptomTrackerProps {
   user: PatientUser;
@@ -8,7 +11,13 @@ interface SymptomTrackerProps {
 }
 
 const SymptomTracker: React.FC<SymptomTrackerProps> = ({ user, onBack }) => {
+  const { currentUser, updateUserProfile } = useAuth();
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingSymptom, setEditingSymptom] = useState<Symptom | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string>('');
+  const [success, setSuccess] = useState<string>('');
+  
   const [newSymptom, setNewSymptom] = useState({
     name: '',
     severity: 1 as Symptom['severity'],
@@ -16,31 +25,96 @@ const SymptomTracker: React.FC<SymptomTrackerProps> = ({ user, onBack }) => {
     notes: ''
   });
 
-  const handleAddSymptom = (e: React.FormEvent) => {
+  const handleAddSymptom = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const symptom: Symptom = {
-      id: Date.now().toString(),
-      ...newSymptom
-    };
-    
-    console.log('Adding symptom:', symptom);
-    
-    // Reset form
-    setNewSymptom({
-      name: '',
-      severity: 1,
-      startDate: new Date().toISOString().split('T')[0],
-      notes: ''
-    });
-    setShowAddForm(false);
-    
-    alert('Symptom added successfully!');
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const symptom: Symptom = {
+        id: Date.now().toString(),
+        ...newSymptom
+      };
+
+      const updatedSymptoms = [...user.symptoms, symptom];
+      await updateUserProfile({ symptoms: updatedSymptoms });
+
+      // Reset form
+      setNewSymptom({
+        name: '',
+        severity: 1,
+        startDate: new Date().toISOString().split('T')[0],
+        notes: ''
+      });
+      setShowAddForm(false);
+      setSuccess('Symptom added successfully!');
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const markSymptomResolved = (symptomId: string) => {
-    console.log('Marking symptom as resolved:', symptomId);
-    alert('Symptom marked as resolved!');
+  const handleEditSymptom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSymptom) return;
+
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const updatedSymptoms = user.symptoms.map(s => 
+        s.id === editingSymptom.id ? editingSymptom : s
+      );
+      await updateUserProfile({ symptoms: updatedSymptoms });
+
+      setEditingSymptom(null);
+      setSuccess('Symptom updated successfully!');
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteSymptom = async (symptomId: string) => {
+    if (!confirm('Are you sure you want to delete this symptom?')) return;
+
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const updatedSymptoms = user.symptoms.filter(s => s.id !== symptomId);
+      await updateUserProfile({ symptoms: updatedSymptoms });
+      setSuccess('Symptom deleted successfully!');
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const markSymptomResolved = async (symptomId: string) => {
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const updatedSymptoms = user.symptoms.map(s => 
+        s.id === symptomId 
+          ? { ...s, endDate: new Date().toISOString().split('T')[0] }
+          : s
+      );
+      await updateUserProfile({ symptoms: updatedSymptoms });
+      setSuccess('Symptom marked as resolved!');
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const getSeverityColor = (severity: number) => {
@@ -98,6 +172,25 @@ const SymptomTracker: React.FC<SymptomTrackerProps> = ({ user, onBack }) => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Alerts */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center">
+              <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+              <span className="text-red-800 text-sm">{error}</span>
+            </div>
+          </div>
+        )}
+
+        {success && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center">
+              <CheckCircle className="h-5 w-5 text-green-400 mr-2" />
+              <span className="text-green-800 text-sm">{success}</span>
+            </div>
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
@@ -121,10 +214,25 @@ const SymptomTracker: React.FC<SymptomTrackerProps> = ({ user, onBack }) => {
                           {getSeverityText(symptom.severity)}
                         </span>
                         <button
+                          onClick={() => setEditingSymptom(symptom)}
+                          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                          disabled={isLoading}
+                        >
+                          <Edit3 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSymptom(symptom.id)}
+                          className="text-sm text-red-600 hover:text-red-700 font-medium"
+                          disabled={isLoading}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                        <button
                           onClick={() => markSymptomResolved(symptom.id)}
                           className="text-sm text-green-600 hover:text-green-700 font-medium"
+                          disabled={isLoading}
                         >
-                          Mark Resolved
+                          <CheckCircle className="h-4 w-4" />
                         </button>
                       </div>
                     </div>
@@ -307,14 +415,104 @@ const SymptomTracker: React.FC<SymptomTrackerProps> = ({ user, onBack }) => {
                   type="button"
                   onClick={() => setShowAddForm(false)}
                   className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                  disabled={isLoading}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
+                  className="flex-1 px-4 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
+                  disabled={isLoading}
                 >
-                  Add Symptom
+                  {isLoading ? 'Adding...' : 'Add Symptom'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Symptom Modal */}
+      {editingSymptom && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Edit Symptom</h2>
+            
+            <form onSubmit={handleEditSymptom} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Symptom Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingSymptom.name}
+                  onChange={(e) => setEditingSymptom({...editingSymptom, name: e.target.value})}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="e.g., Headache, Nausea, Fatigue"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Severity (1-5)
+                </label>
+                <div className="flex items-center space-x-4">
+                  <input
+                    type="range"
+                    min="1"
+                    max="5"
+                    value={editingSymptom.severity}
+                    onChange={(e) => setEditingSymptom({...editingSymptom, severity: parseInt(e.target.value) as Symptom['severity']})}
+                    className="flex-1"
+                  />
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getSeverityColor(editingSymptom.severity)}`}>
+                    {getSeverityText(editingSymptom.severity)}
+                  </span>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={editingSymptom.startDate}
+                  onChange={(e) => setEditingSymptom({...editingSymptom, startDate: e.target.value})}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Notes (Optional)
+                </label>
+                <textarea
+                  value={editingSymptom.notes}
+                  onChange={(e) => setEditingSymptom({...editingSymptom, notes: e.target.value})}
+                  rows={3}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="Any additional details, triggers, or observations..."
+                />
+              </div>
+              
+              <div className="flex space-x-4 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditingSymptom(null)}
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                  disabled={isLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Updating...' : 'Update Symptom'}
                 </button>
               </div>
             </form>
