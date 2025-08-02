@@ -18,7 +18,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onBack }) => {
     licenseNumber: '',
     specialty: '',
     hospital: '',
-    dateOfBirth: ''
+    dateOfBirth: '',
+    bloodGroup: ''
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -250,6 +251,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onBack }) => {
 
             {!isLogin && userRole === 'patient' && (
               <div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Date of Birth
                 </label>
@@ -260,6 +262,21 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onBack }) => {
                   onChange={(e) => setFormData({...formData, dateOfBirth: e.target.value})}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
+              </div>
+               <div className='mt-2'>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Blood Group
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.bloodGroup}
+                  onChange={(e) => setFormData({...formData, bloodGroup: e.target.value})}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="A+"
+                />
+              </div>
+             
               </div>
             )}
 
