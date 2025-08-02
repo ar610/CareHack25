@@ -1,6 +1,15 @@
-import React, { useState } from 'react';
-import { ArrowLeft, FileText, Image, File, Edit, Trash2, Search, Filter } from 'lucide-react';
-import { PatientUser, MedicalRecord } from '../App';
+import React, { useState } from "react";
+import {
+  ArrowLeft,
+  FileText,
+  Image,
+  File,
+  Edit,
+  Trash2,
+  Search,
+  Filter,
+} from "lucide-react";
+import { PatientUser, MedicalRecord } from "../App";
 
 interface ViewRecordsProps {
   user: PatientUser;
@@ -8,33 +17,46 @@ interface ViewRecordsProps {
 }
 
 const ViewRecords: React.FC<ViewRecordsProps> = ({ user, onBack }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [editingRecord, setEditingRecord] = useState<MedicalRecord | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [editingRecord, setEditingRecord] = useState<MedicalRecord | null>(
+    null
+  );
 
-  const filteredRecords = user.medicalRecords.filter(record => {
-    const matchesSearch = record.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         record.content.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || record.category === selectedCategory;
+  const filteredRecords = user.medicalRecords.filter((record) => {
+    const matchesSearch =
+      record.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      record.content.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory =
+      selectedCategory === "all" || record.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
-  const getFileIcon = (type: MedicalRecord['type']) => {
+  const getFileIcon = (type: MedicalRecord["type"]) => {
     switch (type) {
-      case 'image': return <Image className="h-5 w-5 text-green-600" />;
-      case 'pdf': return <File className="h-5 w-5 text-red-600" />;
-      default: return <FileText className="h-5 w-5 text-gray-600" />;
+      case "image":
+        return <Image className="h-5 w-5 text-green-600" />;
+      case "pdf":
+        return <File className="h-5 w-5 text-red-600" />;
+      default:
+        return <FileText className="h-5 w-5 text-gray-600" />;
     }
   };
 
-  const getCategoryColor = (category: MedicalRecord['category']) => {
+  const getCategoryColor = (category: MedicalRecord["category"]) => {
     switch (category) {
-      case 'allergy': return 'bg-red-100 text-red-800';
-      case 'medication': return 'bg-blue-100 text-blue-800';
-      case 'condition': return 'bg-purple-100 text-purple-800';
-      case 'vaccine': return 'bg-green-100 text-green-800';
-      case 'test': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case "allergy":
+        return "bg-red-100 text-red-800";
+      case "medication":
+        return "bg-blue-100 text-blue-800";
+      case "condition":
+        return "bg-purple-100 text-purple-800";
+      case "vaccine":
+        return "bg-green-100 text-green-800";
+      case "test":
+        return "bg-yellow-100 text-yellow-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   };
 
@@ -44,15 +66,15 @@ const ViewRecords: React.FC<ViewRecordsProps> = ({ user, onBack }) => {
 
   const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Saving edited record:', editingRecord);
+    console.log("Saving edited record:", editingRecord);
     setEditingRecord(null);
-    alert('Record updated successfully!');
+    alert("Record updated successfully!");
   };
 
   const handleDeleteRecord = (recordId: string) => {
-    if (confirm('Are you sure you want to delete this record?')) {
-      console.log('Deleting record:', recordId);
-      alert('Record deleted successfully!');
+    if (confirm("Are you sure you want to delete this record?")) {
+      console.log("Deleting record:", recordId);
+      alert("Record deleted successfully!");
     }
   };
 
@@ -69,10 +91,14 @@ const ViewRecords: React.FC<ViewRecordsProps> = ({ user, onBack }) => {
               <ArrowLeft className="h-5 w-5" />
               <span>Back to Dashboard</span>
             </button>
-            
+
             <div className="border-l border-gray-300 pl-4">
-              <h1 className="text-xl font-bold text-gray-900">Medical Records</h1>
-              <p className="text-sm text-gray-600">View and manage your medical documents</p>
+              <h1 className="text-xl font-bold text-gray-900">
+                Medical Records
+              </h1>
+              <p className="text-sm text-gray-600">
+                View and manage your medical documents
+              </p>
             </div>
           </div>
         </div>
@@ -94,7 +120,7 @@ const ViewRecords: React.FC<ViewRecordsProps> = ({ user, onBack }) => {
                 />
               </div>
             </div>
-            
+
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
                 <Filter className="h-5 w-5 text-gray-400" />
@@ -112,7 +138,7 @@ const ViewRecords: React.FC<ViewRecordsProps> = ({ user, onBack }) => {
                   <option value="other">Other</option>
                 </select>
               </div>
-              
+
               <div className="text-sm text-gray-600">
                 {filteredRecords.length} of {user.medicalRecords.length} records
               </div>
@@ -123,16 +149,21 @@ const ViewRecords: React.FC<ViewRecordsProps> = ({ user, onBack }) => {
         {/* Records Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredRecords.map((record) => (
-            <div key={record.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div
+              key={record.id}
+              className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
+            >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center space-x-3">
                   {getFileIcon(record.type)}
                   <div>
-                    <h3 className="font-semibold text-gray-900">{record.title}</h3>
+                    <h3 className="font-semibold text-gray-900">
+                      {record.title}
+                    </h3>
                     <p className="text-sm text-gray-600">{record.uploadDate}</p>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={() => handleEditRecord(record)}
@@ -148,27 +179,45 @@ const ViewRecords: React.FC<ViewRecordsProps> = ({ user, onBack }) => {
                   </button>
                 </div>
               </div>
-              
+
               <div className="mb-4">
-                <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(record.category)}`}>
-                  {record.category.charAt(0).toUpperCase() + record.category.slice(1)}
+                <span
+                  className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(
+                    record.category
+                  )}`}
+                >
+                  {record.category.charAt(0).toUpperCase() +
+                    record.category.slice(1)}
                 </span>
               </div>
-              
+
               <p className="text-sm text-gray-700 mb-4 line-clamp-3">
                 {record.content}
               </p>
-              
+
               <div className="flex items-center justify-between">
-                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                  record.type === 'image' ? 'bg-green-100 text-green-800' :
-                  record.type === 'pdf' ? 'bg-red-100 text-red-800' :
-                  'bg-gray-100 text-gray-800'
-                }`}>
+                <span
+                  className={`px-2 py-1 rounded text-xs font-medium ${
+                    record.type === "image"
+                      ? "bg-green-100 text-green-800"
+                      : record.type === "pdf"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-gray-100 text-gray-800"
+                  }`}
+                >
                   {record.type.toUpperCase()}
                 </span>
-                
-                <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+
+                <button
+                  onClick={() => {
+                    if (record.url) {
+                      window.open(record.url, "_blank");
+                    } else {
+                      alert("No file available for this record.");
+                    }
+                  }}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
                   View Details
                 </button>
               </div>
@@ -179,14 +228,15 @@ const ViewRecords: React.FC<ViewRecordsProps> = ({ user, onBack }) => {
         {filteredRecords.length === 0 && (
           <div className="text-center py-12">
             <FileText className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No records found</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              No records found
+            </h3>
             <p className="text-gray-600 mb-4">
-              {searchTerm || selectedCategory !== 'all' 
-                ? 'Try adjusting your search or filter criteria'
-                : 'You haven\'t uploaded any medical records yet'
-              }
+              {searchTerm || selectedCategory !== "all"
+                ? "Try adjusting your search or filter criteria"
+                : "You haven't uploaded any medical records yet"}
             </p>
-            {!searchTerm && selectedCategory === 'all' && (
+            {!searchTerm && selectedCategory === "all" && (
               <button
                 onClick={onBack}
                 className="text-blue-600 hover:text-blue-700 font-medium"
@@ -202,8 +252,10 @@ const ViewRecords: React.FC<ViewRecordsProps> = ({ user, onBack }) => {
       {editingRecord && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">Edit Record</h2>
-            
+            <h2 className="text-xl font-bold text-gray-900 mb-6">
+              Edit Record
+            </h2>
+
             <form onSubmit={handleSaveEdit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -213,18 +265,28 @@ const ViewRecords: React.FC<ViewRecordsProps> = ({ user, onBack }) => {
                   type="text"
                   required
                   value={editingRecord.title}
-                  onChange={(e) => setEditingRecord({...editingRecord, title: e.target.value})}
+                  onChange={(e) =>
+                    setEditingRecord({
+                      ...editingRecord,
+                      title: e.target.value,
+                    })
+                  }
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Category
                 </label>
                 <select
                   value={editingRecord.category}
-                  onChange={(e) => setEditingRecord({...editingRecord, category: e.target.value as MedicalRecord['category']})}
+                  onChange={(e) =>
+                    setEditingRecord({
+                      ...editingRecord,
+                      category: e.target.value as MedicalRecord["category"],
+                    })
+                  }
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="other">Other</option>
@@ -235,19 +297,24 @@ const ViewRecords: React.FC<ViewRecordsProps> = ({ user, onBack }) => {
                   <option value="test">Test Results</option>
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Content
                 </label>
                 <textarea
                   value={editingRecord.content}
-                  onChange={(e) => setEditingRecord({...editingRecord, content: e.target.value})}
+                  onChange={(e) =>
+                    setEditingRecord({
+                      ...editingRecord,
+                      content: e.target.value,
+                    })
+                  }
                   rows={4}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
-              
+
               <div className="flex space-x-4 pt-4">
                 <button
                   type="button"

@@ -63,6 +63,7 @@ export type Patient = {
 };
 
 export type MedicalRecord = {
+  url: any;
   id: string;
   type: 'image' | 'pdf' | 'text';
   title: string;
