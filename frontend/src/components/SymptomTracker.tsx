@@ -4,6 +4,7 @@ import { PatientUser, Symptom } from '../App';
 import { useAuth } from '../contexts/AuthContext';
 import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { NotificationService } from '../services/notificationService';
 
 interface SymptomTrackerProps {
   user: PatientUser;
@@ -12,6 +13,7 @@ interface SymptomTrackerProps {
 
 const SymptomTracker: React.FC<SymptomTrackerProps> = ({ user, onBack }) => {
   const { currentUser, updateUserProfile } = useAuth();
+  const notificationService = NotificationService.getInstance();
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingSymptom, setEditingSymptom] = useState<Symptom | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,6 +41,14 @@ const SymptomTracker: React.FC<SymptomTrackerProps> = ({ user, onBack }) => {
 
       const updatedSymptoms = [...user.symptoms, symptom];
       await updateUserProfile({ symptoms: updatedSymptoms });
+
+      // Create Firebase notification for the new symptom
+      try {
+        await notificationService.createSymptomNotification(user.id, symptom);
+      } catch (notifError) {
+        console.error('Failed to create symptom notification:', notifError);
+        // Don't fail the symptom creation if notification fails
+      }
 
       // Reset form
       setNewSymptom({

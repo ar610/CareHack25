@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Bell, CheckCircle, AlertCircle, Clock, X, Filter, Search } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { PatientUser } from '../App';
+import { NotificationService } from '../services/notificationService';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase/config';
 
 interface Notification {
   id: string;
@@ -11,87 +14,235 @@ interface Notification {
   read: boolean;
   actionUrl?: string;
   priority: 'low' | 'medium' | 'high';
+  isGenerated?: boolean; // Flag to identify generated vs Firebase notifications
 }
 
 interface NotificationsProps {
   onBack: () => void;
+  user: PatientUser;
 }
 
-const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
-  const { userProfile } = useAuth();
+const Notifications: React.FC<NotificationsProps> = ({ onBack, user }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const notificationService = NotificationService.getInstance();
 
-  // Mock notifications - in a real app, these would come from Firebase
-  useEffect(() => {
-    const mockNotifications: Notification[] = [
-      {
-        id: '1',
-        title: 'Appointment Reminder',
-        message: 'You have a doctor appointment tomorrow at 10:00 AM',
-        type: 'reminder',
-        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-        read: false,
-        priority: 'high'
-      },
-      {
-        id: '2',
-        title: 'Medication Due',
-        message: 'Time to take your blood pressure medication',
-        type: 'warning',
-        timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 hours ago
-        read: false,
-        priority: 'high'
-      },
-      {
-        id: '3',
-        title: 'Test Results Available',
-        message: 'Your blood test results are now available in your records',
-        type: 'success',
-        timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
-        read: true,
-        priority: 'medium'
-      },
-      {
-        id: '4',
-        title: 'System Update',
-        message: 'New features have been added to your health dashboard',
-        type: 'info',
-        timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
-        read: true,
-        priority: 'low'
-      },
-      {
-        id: '5',
-        title: 'Insurance Update',
-        message: 'Your insurance information needs to be updated',
-        type: 'warning',
-        timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
-        read: false,
-        priority: 'medium'
+  // Helper function to generate notifications from user data
+  const generateNotificationsFromAppointments = (): Notification[] => {
+    const now = new Date();
+    const generatedNotifications: Notification[] = [];
+
+    user.appointments.forEach(appointment => {
+      const appointmentDateTime = new Date(`${appointment.date}T${appointment.time}`);
+      const timeDifference = appointmentDateTime.getTime() - now.getTime();
+      const daysDifference = Math.floor(timeDifference / (1000 * 60 * 60 * 24));
+      const hoursDifference = Math.floor(timeDifference / (1000 * 60 * 60));
+      const minutesDifference = Math.floor(timeDifference / (1000 * 60));
+
+      // Upcoming appointment notifications
+      if (timeDifference > 0) {
+        if (daysDifference === 1) {
+          // Tomorrow notification
+          generatedNotifications.push({
+            id: `${appointment.id}-tomorrow`,
+            title: 'Appointment Tomorrow',
+            message: `${appointment.title} is scheduled for tomorrow at ${appointment.time}`,
+            type: 'reminder',
+            timestamp: new Date(now.getTime() - 5 * 60 * 1000), // 5 minutes ago
+            read: false,
+            priority: 'high',
+            isGenerated: true
+          });
+        } else if (hoursDifference <= 2 && hoursDifference > 0) {
+          // Within 2 hours notification
+          generatedNotifications.push({
+            id: `${appointment.id}-soon`,
+            title: 'Appointment Soon',
+            message: `${appointment.title} is in ${hoursDifference} hour${hoursDifference > 1 ? 's' : ''} at ${appointment.time}`,
+            type: 'warning',
+            timestamp: new Date(now.getTime() - 2 * 60 * 1000), // 2 minutes ago
+            read: false,
+            priority: 'high',
+            isGenerated: true
+          });
+        } else if (minutesDifference <= 15 && minutesDifference > 0) {
+          // 15 minutes or less notification
+          generatedNotifications.push({
+            id: `${appointment.id}-imminent`,
+            title: 'Appointment Starting Soon',
+            message: `${appointment.title} starts in ${minutesDifference} minutes`,
+            type: 'warning',
+            timestamp: new Date(now.getTime() - 1 * 60 * 1000), // 1 minute ago
+            read: false,
+            priority: 'high',
+            isGenerated: true
+          });
+        }
       }
-    ];
-    setNotifications(mockNotifications);
-  }, []);
 
-  const markAsRead = (notificationId: string) => {
-    setNotifications(prev => 
-      prev.map(notif => 
-        notif.id === notificationId ? { ...notif, read: true } : notif
-      )
-    );
+      // Past appointment notifications
+      if (timeDifference < 0 && Math.abs(daysDifference) <= 7) {
+        generatedNotifications.push({
+          id: `${appointment.id}-completed`,
+          title: 'Appointment Completed',
+          message: `${appointment.title} was scheduled for ${new Date(appointmentDateTime).toLocaleDateString()} at ${appointment.time}`,
+          type: 'success',
+          timestamp: appointmentDateTime,
+          read: true,
+          priority: 'medium',
+          isGenerated: true
+        });
+      }
+    });
+
+    // Medical records notifications
+    user.medicalRecords.forEach((record) => {
+      const uploadDate = new Date(record.uploadDate);
+      const daysSinceUpload = Math.floor((now.getTime() - uploadDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (daysSinceUpload <= 3) {
+        generatedNotifications.push({
+          id: `record-${record.id}`,
+          title: 'New Medical Record',
+          message: `${record.title} has been uploaded to your records`,
+          type: 'success',
+          timestamp: uploadDate,
+          read: daysSinceUpload > 1,
+          priority: 'medium',
+          isGenerated: true
+        });
+      }
+    });
+
+    // Symptom tracking notifications
+    user.symptoms.forEach(symptom => {
+      const startDate = new Date(symptom.startDate);
+      const daysSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (!symptom.endDate && daysSinceStart >= 3 && daysSinceStart <= 7) {
+        generatedNotifications.push({
+          id: `symptom-${symptom.id}`,
+          title: 'Ongoing Symptom',
+          message: `You've been tracking "${symptom.name}" for ${daysSinceStart} days. Consider consulting your doctor if symptoms persist.`,
+          type: 'warning',
+          timestamp: new Date(now.getTime() - daysSinceStart * 24 * 60 * 60 * 1000),
+          read: false,
+          priority: symptom.severity >= 4 ? 'high' : 'medium',
+          isGenerated: true
+        });
+      }
+    });
+
+    // General health reminders
+    if (user.appointments.length === 0) {
+      generatedNotifications.push({
+        id: 'no-appointments',
+        title: 'Schedule Regular Check-up',
+        message: 'It\'s important to schedule regular health check-ups. Consider booking an appointment with your healthcare provider.',
+        type: 'info',
+        timestamp: new Date(now.getTime() - 24 * 60 * 60 * 1000), // 1 day ago
+        read: false,
+        priority: 'low',
+        isGenerated: true
+      });
+    }
+
+    return generatedNotifications;
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => 
-      prev.map(notif => ({ ...notif, read: true }))
-    );
-  };
+  // Load notifications from Firebase and merge with generated ones
+  useEffect(() => {
+    setLoading(true);
+    let unsubscribe: (() => void) | undefined;
 
-  const deleteNotification = (notificationId: string) => {
-    setNotifications(prev => prev.filter(notif => notif.id !== notificationId));
+    try {
+      // 1. Load notifications from Firebase
+      const notificationsRef = collection(db, 'notifications');
+      const q = query(notificationsRef, where('userId', '==', user.id));
+      
+      // Set up real-time listener
+      unsubscribe = onSnapshot(q, (snapshot) => {
+        const firebaseNotifications: Notification[] = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            title: data.title,
+            message: data.message,
+            type: data.type,
+            timestamp: data.timestamp?.toDate ? data.timestamp.toDate() : new Date(data.timestamp),
+            read: false, // Always treat as unread since we only use delete
+            priority: data.priority || 'medium',
+            actionUrl: data.actionUrl,
+            isGenerated: false
+          };
+        });
+
+        // 2. Generate notifications from user data
+        const generatedNotifications = generateNotificationsFromAppointments();
+        
+        // 3. Get dismissed notifications from localStorage
+        const dismissed = JSON.parse(localStorage.getItem(`dismissedNotifications_${user.id}`) || '[]');
+        
+        // 4. Filter out dismissed generated notifications
+        const filteredGenerated = generatedNotifications.filter(notif => 
+          !dismissed.includes(notif.id)
+        );
+        
+        // 5. Merge and sort all notifications
+        const allNotifications = [...firebaseNotifications, ...filteredGenerated]
+          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        
+        setNotifications(allNotifications);
+        setLoading(false);
+      });
+      
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+      // Fallback to generated notifications only
+      const generatedNotifications = generateNotificationsFromAppointments();
+      setNotifications(generatedNotifications);
+      setLoading(false);
+    }
+
+    // Cleanup function
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [user.appointments, user.medicalRecords, user.symptoms, user.id]);
+
+  // Delete function that handles both Firebase and generated notifications
+  const deleteNotification = async (notificationId: string) => {
+    try {
+      const notification = notifications.find(n => n.id === notificationId);
+      
+      if (notification?.isGenerated) {
+        // It's a generated notification - add to dismissed list and remove from state
+        const dismissed = JSON.parse(localStorage.getItem(`dismissedNotifications_${user.id}`) || '[]');
+        dismissed.push(notificationId);
+        localStorage.setItem(`dismissedNotifications_${user.id}`, JSON.stringify(dismissed));
+        
+        setNotifications(prev => prev.filter(notif => notif.id !== notificationId));
+      } else {
+        // It's a Firebase notification - try to delete from Firebase
+        const success = await notificationService.deleteNotification(notificationId);
+        
+        if (success) {
+          // Firebase deletion successful, state will update via onSnapshot
+          console.log('Notification deleted from Firebase:', notificationId);
+        } else {
+          console.error('Failed to delete notification from Firebase');
+          // Optionally show error message to user
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+      // Fallback: remove from local state anyway
+      setNotifications(prev => prev.filter(notif => notif.id !== notificationId));
+    }
   };
 
   const getTypeIcon = (type: Notification['type']) => {
@@ -152,18 +303,24 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
   };
 
   const filteredNotifications = notifications
-    .filter(notif => {
-      if (filter === 'unread') return !notif.read;
-      if (filter === 'read') return notif.read;
-      return true;
-    })
     .filter(notif => 
       notif.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       notif.message.toLowerCase().includes(searchTerm.toLowerCase())
     )
     .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.length; // All notifications count as unread
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading notifications...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -187,15 +344,6 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
             </div>
             
             <div className="flex items-center space-x-4">
-              {unreadCount > 0 && (
-                <button
-                  onClick={markAllAsRead}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Mark all as read
-                </button>
-              )}
-              
               <div className="relative">
                 <Bell className="h-6 w-6 text-gray-600" />
                 {unreadCount > 0 && (
@@ -225,7 +373,7 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
               />
             </div>
             
-            {/* Filter */}
+            {/* Filter by Type */}
             <div className="flex items-center space-x-2">
               <Filter className="h-5 w-5 text-gray-400" />
               <select
@@ -234,8 +382,6 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="all">All Notifications</option>
-                <option value="unread">Unread Only</option>
-                <option value="read">Read Only</option>
               </select>
             </div>
           </div>
@@ -246,9 +392,7 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
           {filteredNotifications.map(notification => (
             <div
               key={notification.id}
-              className={`bg-white rounded-xl shadow-sm border border-gray-200 p-6 ${getPriorityColor(notification.priority)} ${
-                !notification.read ? 'ring-2 ring-blue-200' : ''
-              }`}
+              className={`bg-white rounded-xl shadow-sm border border-gray-200 p-6 ${getPriorityColor(notification.priority)}`}
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-start space-x-4 flex-1">
@@ -258,7 +402,7 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
                   
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center space-x-2 mb-2">
-                      <h3 className={`font-semibold ${!notification.read ? 'text-gray-900' : 'text-gray-700'}`}>
+                      <h3 className="font-semibold text-gray-900">
                         {notification.title}
                       </h3>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getTypeColor(notification.type)}`}>
@@ -267,6 +411,11 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
                       {notification.priority === 'high' && (
                         <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
                           High Priority
+                        </span>
+                      )}
+                      {notification.isGenerated && (
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                          Auto-generated
                         </span>
                       )}
                     </div>
@@ -279,14 +428,6 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
                       </span>
                       
                       <div className="flex items-center space-x-2">
-                        {!notification.read && (
-                          <button
-                            onClick={() => markAsRead(notification.id)}
-                            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                          >
-                            Mark as read
-                          </button>
-                        )}
                         <button
                           onClick={() => deleteNotification(notification.id)}
                           className="text-sm text-red-600 hover:text-red-700 font-medium"
@@ -306,8 +447,8 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
               <Bell className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No notifications</h3>
               <p className="text-gray-600">
-                {searchTerm || filter !== 'all' 
-                  ? 'No notifications match your current filters'
+                {searchTerm 
+                  ? 'No notifications match your search'
                   : 'You\'re all caught up! No new notifications.'
                 }
               </p>
@@ -346,4 +487,4 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
   );
 };
 
-export default Notifications; 
+export default Notifications;

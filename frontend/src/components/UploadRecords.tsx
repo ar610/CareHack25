@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowLeft, Upload, FileText, Image, File, X, Plus, AlertCircle, CheckCircle } from 'lucide-react';
 import { PatientUser, MedicalRecord } from '../App';
 import { useAuth } from '../contexts/AuthContext';
+import { NotificationService } from '../services/notificationService';
 
 interface UploadRecordsProps {
   user: PatientUser;
@@ -10,6 +11,7 @@ interface UploadRecordsProps {
 
 const UploadRecords: React.FC<UploadRecordsProps> = ({ user, onBack }) => {
   const { updateUserProfile } = useAuth();
+  const notificationService = NotificationService.getInstance();
   const [dragActive, setDragActive] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -87,6 +89,14 @@ const UploadRecords: React.FC<UploadRecordsProps> = ({ user, onBack }) => {
       // Add to user's medical records
       const updatedRecords = [...user.medicalRecords, medicalRecord];
       await updateUserProfile({ medicalRecords: updatedRecords });
+
+      // Create Firebase notification for the new medical record
+      try {
+        await notificationService.createMedicalRecordNotification(user.id, medicalRecord);
+      } catch (notifError) {
+        console.error('Failed to create medical record notification:', notifError);
+        // Don't fail the record creation if notification fails
+      }
 
       // Reset form
       setRecordData({ title: '', category: 'other', notes: '' });

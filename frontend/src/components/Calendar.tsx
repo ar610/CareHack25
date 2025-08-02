@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Plus, Calendar as CalendarIcon, Clock, Bell, Pill, User, Edit3, Trash2, AlertCircle, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Plus, Calendar as CalendarIcon, Clock, Bell, Pill, User, Edit3, Trash2, AlertCircle, CheckCircle, BellRing } from 'lucide-react';
 import { PatientUser, Appointment } from '../App';
 import { useAuth } from '../contexts/AuthContext';
+import { NotificationService } from '../services/notificationService';
 
 interface CalendarProps {
   user: PatientUser;
@@ -16,20 +17,121 @@ const Calendar: React.FC<CalendarProps> = ({ user, onBack }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  
+  const notificationService = NotificationService.getInstance();
   
   const [newAppointment, setNewAppointment] = useState({
     title: '',
     date: new Date().toISOString().split('T')[0],
-    time: '09:00',
+    time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
     type: 'appointment' as Appointment['type'],
     notes: ''
   });
+
+  // Initialize notifications and check for upcoming appointments
+  useEffect(() => {
+    const initializeNotifications = async () => {
+      const permission = notificationService.getPermission();
+      setNotificationPermission(permission);
+      setNotificationsEnabled(permission === 'granted');
+    };
+
+    initializeNotifications();
+    checkUpcomingAppointments();
+
+    // Check for upcoming appointments every minute
+    const interval = setInterval(checkUpcomingAppointments, 60000);
+    return () => clearInterval(interval);
+  }, [user.appointments]);
+
+  const checkUpcomingAppointments = () => {
+    const now = new Date();
+    const upcomingAppointments = getUpcomingEvents();
+
+    upcomingAppointments.forEach(appointment => {
+      const appointmentDateTime = new Date(`${appointment.date}T${appointment.time}`);
+      const timeDifference = appointmentDateTime.getTime() - now.getTime();
+      const minutesDifference = Math.floor(timeDifference / (1000 * 60));
+
+      // Notify 15 minutes before appointment
+      if (minutesDifference === 15) {
+        showAppointmentNotification(appointment, '15 minutes');
+      }
+      // Notify 5 minutes before appointment
+      else if (minutesDifference === 5) {
+        showAppointmentNotification(appointment, '5 minutes');
+      }
+      // Notify when appointment time arrives
+      else if (minutesDifference === 0) {
+        showAppointmentNotification(appointment, 'now');
+      }
+    });
+  };
+
+  const showAppointmentNotification = async (appointment: Appointment, timeUntil: string) => {
+    if (!notificationsEnabled) return;
+
+    const typeEmoji = appointment.type === 'appointment' ? '👩‍⚕️' : 
+                     appointment.type === 'medication' ? '💊' : '📋';
+    
+    const title = timeUntil === 'now' 
+      ? `${typeEmoji} Appointment Time!`
+      : `${typeEmoji} Upcoming Appointment`;
+    
+    const body = timeUntil === 'now'
+      ? `${appointment.title} is starting now`
+      : `${appointment.title} in ${timeUntil}`;
+
+    await notificationService.showNotification({
+      title,
+      body,
+      tag: `appointment-${appointment.id}`,
+      requireInteraction: timeUntil === 'now'
+    });
+  };
+
+  const requestNotificationPermission = async () => {
+    const permission = await notificationService.requestPermission();
+    setNotificationPermission(permission);
+    setNotificationsEnabled(permission === 'granted');
+    
+    if (permission === 'granted') {
+      setSuccess('Notifications enabled! You\'ll receive reminders for upcoming appointments.');
+    } else {
+      setError('Notification permission denied. You won\'t receive appointment reminders.');
+    }
+  };
+
+  const toggleNotifications = () => {
+    if (notificationPermission === 'granted') {
+      setNotificationsEnabled(!notificationsEnabled);
+      if (!notificationsEnabled) {
+        setSuccess('Notifications enabled!');
+      } else {
+        setSuccess('Notifications disabled.');
+      }
+    } else {
+      requestNotificationPermission();
+    }
+  };
 
   const handleAddAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
     setSuccess('');
+
+    // Validate that the appointment is not in the past
+    const appointmentDateTime = new Date(`${newAppointment.date}T${newAppointment.time}`);
+    const now = new Date();
+    
+    if (appointmentDateTime <= now) {
+      setError('Cannot schedule appointments in the past. Please select a future time.');
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const appointment: Appointment = {
@@ -40,11 +142,20 @@ const Calendar: React.FC<CalendarProps> = ({ user, onBack }) => {
       const updatedAppointments = [...user.appointments, appointment];
       await updateUserProfile({ appointments: updatedAppointments });
 
-      // Reset form
+      // Create Firebase notification for the new appointment
+      try {
+        await notificationService.createAppointmentNotification(user.id, appointment);
+      } catch (notifError) {
+        console.error('Failed to create appointment notification:', notifError);
+        // Don't fail the appointment creation if notification fails
+      }
+
+      // Reset form with current date and time
+      const currentTime = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
       setNewAppointment({
         title: '',
         date: new Date().toISOString().split('T')[0],
-        time: '09:00',
+        time: currentTime,
         type: 'appointment',
         notes: ''
       });
@@ -65,11 +176,37 @@ const Calendar: React.FC<CalendarProps> = ({ user, onBack }) => {
     setError('');
     setSuccess('');
 
+    // Only validate future time if the appointment is being moved to a future date
+    const appointmentDateTime = new Date(`${editingAppointment.date}T${editingAppointment.time}`);
+    const now = new Date();
+    
+    if (appointmentDateTime <= now) {
+      setError('Cannot schedule appointments in the past. Please select a future time.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const updatedAppointments = user.appointments.map(a => 
         a.id === editingAppointment.id ? editingAppointment : a
       );
       await updateUserProfile({ appointments: updatedAppointments });
+
+      // Create Firebase notification for the updated appointment
+      try {
+        await notificationService.createFirebaseNotification({
+          userId: user.id,
+          title: 'Appointment Updated',
+          message: `${editingAppointment.title} has been rescheduled to ${new Date(`${editingAppointment.date}T${editingAppointment.time}`).toLocaleDateString()} at ${editingAppointment.time}`,
+          type: 'info',
+          priority: 'medium',
+          read: false,
+          relatedEventId: editingAppointment.id,
+          relatedEventType: 'appointment'
+        });
+      } catch (notifError) {
+        console.error('Failed to create appointment update notification:', notifError);
+      }
 
       setEditingAppointment(null);
       setSuccess('Event updated successfully!');
@@ -145,6 +282,91 @@ const Calendar: React.FC<CalendarProps> = ({ user, onBack }) => {
     return user.appointments.filter(apt => apt.date === date);
   };
 
+  // Get past events
+  const getPastEvents = () => {
+    const now = new Date();
+    
+    return user.appointments.filter(appointment => {
+      // Create a proper datetime object for the appointment
+      const appointmentDateTime = new Date(`${appointment.date}T${appointment.time}`);
+      
+      // Only include appointments that are in the past
+      return appointmentDateTime <= now;
+    }).sort((a, b) => {
+      // Sort by date and time, most recent first
+      const dateTimeA = new Date(`${a.date}T${a.time}`);
+      const dateTimeB = new Date(`${b.date}T${b.time}`);
+      return dateTimeB.getTime() - dateTimeA.getTime();
+    });
+  };
+
+  // Get upcoming events (future events only)
+  const getUpcomingEvents = () => {
+    const now = new Date();
+    
+    return user.appointments.filter(appointment => {
+      // Create a proper datetime object for the appointment
+      const appointmentDateTime = new Date(`${appointment.date}T${appointment.time}`);
+      
+      // Only include appointments that are in the future
+      return appointmentDateTime > now;
+    }).sort((a, b) => {
+      // Sort by date and time, earliest first
+      const dateTimeA = new Date(`${a.date}T${a.time}`);
+      const dateTimeB = new Date(`${b.date}T${b.time}`);
+      return dateTimeA.getTime() - dateTimeB.getTime();
+    });
+  };
+
+  // Helper functions for date/time validation
+  const getCurrentDate = () => {
+    return new Date().toISOString().split('T')[0];
+  };
+
+  const getCurrentTime = () => {
+    const now = new Date();
+    return now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getMinTime = (selectedDate: string) => {
+    const today = getCurrentDate();
+    if (selectedDate === today) {
+      return getCurrentTime();
+    }
+    return '00:00';
+  };
+
+  // Handle date change and update time if necessary
+  const handleDateChange = (newDate: string) => {
+    const updatedAppointment = { ...newAppointment, date: newDate };
+    
+    // If selecting today and current time is in the past, update to current time
+    if (newDate === getCurrentDate()) {
+      const currentTime = getCurrentTime();
+      if (newAppointment.time < currentTime) {
+        updatedAppointment.time = currentTime;
+      }
+    }
+    
+    setNewAppointment(updatedAppointment);
+  };
+
+  const handleEditDateChange = (newDate: string) => {
+    if (!editingAppointment) return;
+    
+    const updatedAppointment = { ...editingAppointment, date: newDate };
+    
+    // If selecting today and current time is in the past, update to current time
+    if (newDate === getCurrentDate()) {
+      const currentTime = getCurrentTime();
+      if (editingAppointment.time < currentTime) {
+        updatedAppointment.time = currentTime;
+      }
+    }
+    
+    setEditingAppointment(updatedAppointment);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -166,13 +388,34 @@ const Calendar: React.FC<CalendarProps> = ({ user, onBack }) => {
               </div>
             </div>
             
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="flex items-center space-x-2 bg-orange-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-orange-700 transition-colors"
-            >
-              <Plus className="h-5 w-5" />
-              <span>Add Event</span>
-            </button>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={toggleNotifications}
+                className={`flex items-center space-x-2 px-3 py-2 rounded-lg font-medium transition-colors ${
+                  notificationsEnabled 
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                title={notificationsEnabled ? 'Notifications enabled' : 'Enable notifications'}
+              >
+                {notificationsEnabled ? (
+                  <BellRing className="h-5 w-5" />
+                ) : (
+                  <Bell className="h-5 w-5" />
+                )}
+                <span className="text-sm">
+                  {notificationsEnabled ? 'Notifications On' : 'Enable Notifications'}
+                </span>
+              </button>
+              
+              <button
+                onClick={() => setShowAddForm(true)}
+                className="flex items-center space-x-2 bg-orange-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-orange-700 transition-colors"
+              >
+                <Plus className="h-5 w-5" />
+                <span>Add Event</span>
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -263,6 +506,55 @@ const Calendar: React.FC<CalendarProps> = ({ user, onBack }) => {
 
           {/* Sidebar */}
           <div className="space-y-6">
+            {/* Notification Status */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Notification Settings</h3>
+              
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    {notificationsEnabled ? (
+                      <BellRing className="h-5 w-5 text-green-600" />
+                    ) : (
+                      <Bell className="h-5 w-5 text-gray-400" />
+                    )}
+                    <span className="text-sm font-medium text-gray-900">
+                      Browser Notifications
+                    </span>
+                  </div>
+                  <button
+                    onClick={toggleNotifications}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      notificationsEnabled ? 'bg-green-600' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        notificationsEnabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+                
+                {notificationsEnabled && (
+                  <div className="text-xs text-gray-600 bg-green-50 p-2 rounded">
+                    📱 You'll receive notifications 15 min, 5 min, and at appointment time
+                  </div>
+                )}
+                
+                {!notificationsEnabled && notificationPermission === 'denied' && (
+                  <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
+                    ⚠️ Notifications blocked. Please enable in browser settings.
+                  </div>
+                )}
+                
+                {!notificationsEnabled && notificationPermission === 'default' && (
+                  <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                    💡 Click the toggle above to enable appointment reminders
+                  </div>
+                )}
+              </div>
+            </div>
             {/* Selected Date Events */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
@@ -321,7 +613,7 @@ const Calendar: React.FC<CalendarProps> = ({ user, onBack }) => {
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Upcoming Events</h3>
               
               <div className="space-y-3">
-                {user.appointments.slice(0, 5).map(appointment => (
+                {getUpcomingEvents().slice(0, 5).map(appointment => (
                   <div key={appointment.id} className="flex items-center space-x-3">
                     <div className={`p-2 rounded-lg ${getTypeColor(appointment.type)}`}>
                       {getTypeIcon(appointment.type)}
@@ -329,24 +621,78 @@ const Calendar: React.FC<CalendarProps> = ({ user, onBack }) => {
                     <div className="flex-1">
                       <p className="font-medium text-gray-900">{appointment.title}</p>
                       <p className="text-sm text-gray-600">
-                        {appointment.date} at {appointment.time}
+                        {new Date(appointment.date).toLocaleDateString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric' 
+                        })} at {appointment.time}
                       </p>
                     </div>
                   </div>
                 ))}
                 
-                {user.appointments.length === 0 && (
+                {getUpcomingEvents().length === 0 && (
                   <p className="text-gray-600 text-sm">No upcoming events</p>
+                )}
+              </div>
+            </div>
+
+            {/* Past Events */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Past Events</h3>
+              
+              <div className="space-y-3 max-h-80 overflow-y-auto">
+                {getPastEvents().slice(0, 10).map(appointment => (
+                  <div key={appointment.id} className="flex items-center space-x-3 opacity-75">
+                    <div className={`p-2 rounded-lg ${getTypeColor(appointment.type)}`}>
+                      {getTypeIcon(appointment.type)}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-700">{appointment.title}</p>
+                      <p className="text-sm text-gray-500">
+                        {new Date(appointment.date).toLocaleDateString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric',
+                          year: appointment.date.substring(0, 4) !== new Date().getFullYear().toString() ? 'numeric' : undefined
+                        })} at {appointment.time}
+                      </p>
+                      {appointment.notes && (
+                        <p className="text-xs text-gray-400 mt-1 truncate">{appointment.notes}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                
+                {getPastEvents().length === 0 && (
+                  <p className="text-gray-600 text-sm">No past events</p>
+                )}
+                
+                {getPastEvents().length > 10 && (
+                  <p className="text-xs text-gray-500 text-center pt-2 border-t">
+                    Showing 10 most recent events
+                  </p>
                 )}
               </div>
             </div>
 
             {/* Quick Stats */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">This Month</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Event Statistics</h3>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Appointments</span>
+                  <span className="text-sm text-gray-600">Upcoming Events</span>
+                  <span className="text-lg font-bold text-blue-600">
+                    {getUpcomingEvents().length}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Past Events</span>
+                  <span className="text-lg font-bold text-gray-600">
+                    {getPastEvents().length}
+                  </span>
+                </div>
+                <hr className="my-2" />
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Medical Appointments</span>
                   <span className="text-lg font-bold text-blue-600">
                     {user.appointments.filter(a => a.type === 'appointment').length}
                   </span>
@@ -413,8 +759,9 @@ const Calendar: React.FC<CalendarProps> = ({ user, onBack }) => {
                   <input
                     type="date"
                     required
+                    min={getCurrentDate()}
                     value={newAppointment.date}
-                    onChange={(e) => setNewAppointment({...newAppointment, date: e.target.value})}
+                    onChange={(e) => handleDateChange(e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   />
                 </div>
@@ -426,10 +773,16 @@ const Calendar: React.FC<CalendarProps> = ({ user, onBack }) => {
                   <input
                     type="time"
                     required
+                    min={getMinTime(newAppointment.date)}
                     value={newAppointment.time}
                     onChange={(e) => setNewAppointment({...newAppointment, time: e.target.value})}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   />
+                  {newAppointment.date === getCurrentDate() && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Select a time after {getCurrentTime()}
+                    </p>
+                  )}
                 </div>
               </div>
               
@@ -512,8 +865,9 @@ const Calendar: React.FC<CalendarProps> = ({ user, onBack }) => {
                   <input
                     type="date"
                     required
+                    min={getCurrentDate()}
                     value={editingAppointment.date}
-                    onChange={(e) => setEditingAppointment({...editingAppointment, date: e.target.value})}
+                    onChange={(e) => handleEditDateChange(e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   />
                 </div>
@@ -525,10 +879,16 @@ const Calendar: React.FC<CalendarProps> = ({ user, onBack }) => {
                   <input
                     type="time"
                     required
+                    min={getMinTime(editingAppointment.date)}
                     value={editingAppointment.time}
                     onChange={(e) => setEditingAppointment({...editingAppointment, time: e.target.value})}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   />
+                  {editingAppointment.date === getCurrentDate() && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Select a time after {getCurrentTime()}
+                    </p>
+                  )}
                 </div>
               </div>
               

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   MessageCircle, 
   Upload, 
@@ -9,17 +9,91 @@ import {
   LogOut, 
   Bell,
   Heart,
-  Plus
+  RefreshCw
 } from 'lucide-react';
 import { PatientUser } from '../App';
+import { useNotificationManager } from '../hooks/useNotificationManager';
 
 interface PatientDashboardProps {
   user: PatientUser;
   onNavigate: (screen: string) => void;
   onLogout: () => void;
+  onRefreshAppointments?: () => Promise<PatientUser>;
 }
 
-const PatientDashboard: React.FC<PatientDashboardProps> = ({ user, onNavigate, onLogout }) => {
+const PatientDashboard: React.FC<PatientDashboardProps> = ({ 
+  user, 
+  onNavigate, 
+  onLogout, 
+  onRefreshAppointments 
+}) => {
+  const [currentUser, setCurrentUser] = useState<PatientUser>(user);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  
+  // Use notification manager hook
+  const { unreadCount } = useNotificationManager(currentUser);
+
+  // Auto-refresh appointments every 30 seconds
+  useEffect(() => {
+    const refreshInterval = setInterval(async () => {
+      if (onRefreshAppointments) {
+        try {
+          setIsRefreshing(true);
+          const updatedUser = await onRefreshAppointments();
+          setCurrentUser(updatedUser);
+          setLastUpdated(new Date());
+        } catch (error) {
+          console.error('Failed to refresh appointments:', error);
+        } finally {
+          setIsRefreshing(false);
+        }
+      }
+    }, 30000); // Refresh every 30 seconds
+
+    return () => clearInterval(refreshInterval);
+  }, [onRefreshAppointments]);
+
+  // Update local state when user prop changes
+  useEffect(() => {
+    setCurrentUser(user);
+    setLastUpdated(new Date());
+  }, [user]);
+
+  // Manual refresh function
+  const handleManualRefresh = async () => {
+    if (onRefreshAppointments && !isRefreshing) {
+      try {
+        setIsRefreshing(true);
+        const updatedUser = await onRefreshAppointments();
+        setCurrentUser(updatedUser);
+        setLastUpdated(new Date());
+      } catch (error) {
+        console.error('Failed to refresh appointments:', error);
+      } finally {
+        setIsRefreshing(false);
+      }
+    }
+  };
+
+  // Get upcoming appointments (future events only)
+  // Get upcoming appointments (future events only)
+const getUpcomingAppointments = () => {
+  const now = new Date();
+  
+  return currentUser.appointments.filter(appointment => {
+    // Create a proper datetime object for the appointment
+    const appointmentDateTime = new Date(`${appointment.date}T${appointment.time}`);
+    
+    // Only include appointments that are in the future
+    return appointmentDateTime > now;
+  }).sort((a, b) => {
+    // Sort by date and time, earliest first
+    const dateTimeA = new Date(`${a.date}T${a.time}`);
+    const dateTimeB = new Date(`${b.date}T${b.time}`);
+    return dateTimeA.getTime() - dateTimeB.getTime();
+  });
+};
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -42,15 +116,17 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ user, onNavigate, o
                 className="relative p-2 text-gray-600 hover:text-gray-900 transition-colors"
               >
                 <Bell className="h-6 w-6" />
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                  3
-                </span>
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
               </button>
               
               <div className="flex items-center space-x-3">
                 <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                  <p className="text-xs text-gray-600">Patient ID: {user.id}</p>
+                  <p className="text-sm font-medium text-gray-900">{currentUser.name}</p>
+                  <p className="text-xs text-gray-600">Patient ID: {currentUser.id}</p>
                 </div>
                 <button
                   onClick={() => onNavigate('profile')}
@@ -148,7 +224,7 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ user, onNavigate, o
               </div>
               
               <div className="space-y-3">
-                {user.medicalRecords.slice(0, 3).map((record) => (
+                {currentUser.medicalRecords.slice(0, 3).map((record) => (
                   <div
                     key={record.id}
                     className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
@@ -174,7 +250,7 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ user, onNavigate, o
                   </div>
                 ))}
                 
-                {user.medicalRecords.length === 0 && (
+                {currentUser.medicalRecords.length === 0 && (
                   <div className="text-center py-8">
                     <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                     <p className="text-gray-600">No medical records yet</p>
@@ -198,17 +274,17 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ user, onNavigate, o
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Medical Records</span>
-                  <span className="text-2xl font-bold text-blue-600">{user.medicalRecords.length}</span>
+                  <span className="text-2xl font-bold text-blue-600">{currentUser.medicalRecords.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Active Symptoms</span>
                   <span className="text-2xl font-bold text-orange-600">
-                    {user.symptoms.filter(s => !s.endDate).length}
+                    {currentUser.symptoms.filter(s => !s.endDate).length}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Upcoming Events</span>
-                  <span className="text-2xl font-bold text-green-600">{user.appointments.length}</span>
+                  <span className="text-2xl font-bold text-green-600">{getUpcomingAppointments().length}</span>
                 </div>
               </div>
             </div>
@@ -217,7 +293,7 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ user, onNavigate, o
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Symptoms</h3>
               <div className="space-y-3">
-                {user.symptoms.slice(0, 3).map((symptom) => (
+                {currentUser.symptoms.slice(0, 3).map((symptom) => (
                   <div key={symptom.id} className="flex items-center justify-between">
                     <div>
                       <p className="font-medium text-gray-900">{symptom.name}</p>
@@ -236,7 +312,7 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ user, onNavigate, o
                   </div>
                 ))}
                 
-                {user.symptoms.length === 0 && (
+                {currentUser.symptoms.length === 0 && (
                   <p className="text-gray-600 text-sm">No symptoms tracked</p>
                 )}
               </div>
@@ -244,18 +320,40 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ user, onNavigate, o
 
             {/* Upcoming Appointments */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Upcoming</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Upcoming</h3>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-gray-500">
+                    Last updated: {lastUpdated.toLocaleTimeString()}
+                  </span>
+                  <button
+                    onClick={handleManualRefresh}
+                    disabled={isRefreshing}
+                    className={`p-1.5 rounded-lg transition-colors ${
+                      isRefreshing 
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                        : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                    }`}
+                    title="Refresh appointments"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
               <div className="space-y-3">
-                {user.appointments.slice(0, 3).map((appointment) => (
+                {getUpcomingAppointments().slice(0, 3).map((appointment) => (
                   <div key={appointment.id} className="p-3 bg-blue-50 rounded-lg">
                     <p className="font-medium text-gray-900">{appointment.title}</p>
                     <p className="text-sm text-gray-600">
-                      {appointment.date} at {appointment.time}
+                      {new Date(appointment.date).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric' 
+                      })} at {appointment.time}
                     </p>
                   </div>
                 ))}
                 
-                {user.appointments.length === 0 && (
+                {getUpcomingAppointments().length === 0 && (
                   <p className="text-gray-600 text-sm">No upcoming appointments</p>
                 )}
               </div>

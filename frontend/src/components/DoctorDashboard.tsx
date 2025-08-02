@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { Search, MessageCircle, Clock, User, LogOut, Key, Users, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, MessageCircle, Clock, User, LogOut, Key, AlertCircle, Bell } from 'lucide-react';
 import { Doctor, Patient } from '../App';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase/config';
 
 interface DoctorDashboardProps {
   user: Doctor;
@@ -13,6 +15,24 @@ const DoctorDashboard: React.FC<DoctorDashboardProps> = ({ user, onPatientSelect
   const [patientId, setPatientId] = useState('');
   const [patientKey, setPatientKey] = useState('');
   const [searchError, setSearchError] = useState('');
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+
+  // Load doctor's notifications from Firebase
+  useEffect(() => {
+    const notificationsRef = collection(db, 'notifications');
+    const q = query(notificationsRef, where('userId', '==', user.id));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const unreadCount = snapshot.docs.filter(doc => {
+        const data = doc.data();
+        return !data.read;
+      }).length;
+      
+      setUnreadNotificationCount(unreadCount);
+    });
+
+    return unsubscribe;
+  }, [user.id]);
 
   // Mock patient data
   const recentPatients: Patient[] = [
@@ -77,9 +97,11 @@ const DoctorDashboard: React.FC<DoctorDashboardProps> = ({ user, onPatientSelect
                 className="relative p-2 text-gray-600 hover:text-gray-900 transition-colors"
               >
                 <Bell className="h-6 w-6" />
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                  2
-                </span>
+                {unreadNotificationCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                    {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                  </span>
+                )}
               </button>
               
               <div className="flex items-center space-x-2 bg-green-100 px-3 py-1 rounded-full">

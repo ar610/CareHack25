@@ -236,6 +236,7 @@ function AppContent() {
       {currentScreen === 'notifications' && (
         <ProtectedRoute allowedRoles={['doctor', 'patient']}>
           <Notifications 
+            user={userProfile as PatientUser}
             onBack={() => {
               if (userProfile?.role === 'doctor') {
                 setCurrentScreen('doctor-dashboard');
