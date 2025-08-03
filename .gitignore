@@ -1,0 +1,65 @@
+.env
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+.env.*
+
+# Virtual environments
+venv/
+myenv/
+env/
+
+# FastAPI / Uvicorn logs
+*.log
+
+# VSCode settings
+.vscode/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Pytest cache
+.pytest_cache/
+
+# Pydantic compiled cache
+__pydantic_cache__/
+
+# Mypy cache
+.mypy_cache/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Compiled C files
+*.so
+
+# Local database
+*.db
+*.sqlite3
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# ChromaDB or other local storage (if applicable)
+chroma/
+chroma_db/
+
+# Ignore uploads (if any)
+uploads/
+media/
+
+# Ignore frontend build if FastAPI serves it
+frontend/build/
