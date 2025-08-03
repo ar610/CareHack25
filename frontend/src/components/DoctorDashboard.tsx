@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Search, MessageCircle, Clock, User, LogOut, Key, AlertCircle, Bell } from 'lucide-react';
 import { Doctor, Patient } from '../App';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection,getDocs, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
+
 
 interface DoctorDashboardProps {
   user: Doctor;
@@ -16,6 +17,7 @@ const DoctorDashboard: React.FC<DoctorDashboardProps> = ({ user, onPatientSelect
   const [patientKey, setPatientKey] = useState('');
   const [searchError, setSearchError] = useState('');
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [recentPatients, setRecentPatients] = useState<Patient[]>([]);
 
   // Load doctor's notifications from Firebase
   useEffect(() => {
@@ -34,45 +36,40 @@ const DoctorDashboard: React.FC<DoctorDashboardProps> = ({ user, onPatientSelect
     return unsubscribe;
   }, [user.id]);
 
-  // Mock patient data
-  const recentPatients: Patient[] = [
-    {
-      id: 'P001',
-      name: 'Ahmed Hassan',
-      age: 34,
-      allergies: ['Penicillin', 'Shellfish'],
-      medications: ['Lisinopril 10mg', 'Metformin 500mg'],
-      conditions: ['Hypertension', 'Type 2 Diabetes'],
-      vaccines: ['COVID-19', 'Flu 2024', 'Hepatitis B'],
-      emergencyContact: '+1-555-0123',
-      lastAccessed: '2025-01-15'
-    },
-    {
-      id: 'P002',
-      name: 'Kennedy Smith',
-      age: 67,
-      allergies: ['Aspirin', 'Latex'],
-      medications: ['Warfarin 5mg', 'Atorvastatin 20mg'],
-      conditions: ['Atrial Fibrillation', 'High Cholesterol'],
-      vaccines: ['COVID-19', 'Pneumonia', 'Shingles'],
-      emergencyContact: '+1-555-0456',
-      lastAccessed: '2025-01-14'
-    }
-  ];
+   useEffect(() => {
+     const fetchPatients = async () => {
+       try {
+         const querySnapshot = await getDocs(collection(db, "user_data"));
+         const patients: Patient[] = querySnapshot.docs.map((doc) => ({
+           id: doc.id,
+           ...doc.data(),
+         })) as Patient[];
+         setRecentPatients(patients);
+       } catch (error) {
+         console.error("Error fetching patients:", error);
+       }
+     };
+
+     fetchPatients();
+   }, []);
+
+  // Mock patient data removed to avoid redeclaration error.
 
   const handlePatientSearch = () => {
-    if (!patientId.trim() || !patientKey.trim()) {
+    if (!patientId.trim() ) {
       setSearchError('Both Patient ID and Access Key are required');
       return;
     }
 
     // Mock validation
-    const patient = recentPatients.find(p => p.id === patientId.toUpperCase());
+     const patient = recentPatients[0];
     if (patient) {
       onPatientSelect(patient);
-    } else {
-      setSearchError('Invalid Patient ID or Access Key');
-    }
+    } 
+    
+    //else {
+    //   setSearchError('Invalid Patient ID or Access Key');
+    // }
   };
 
   return (
@@ -161,24 +158,7 @@ const DoctorDashboard: React.FC<DoctorDashboardProps> = ({ user, onPatientSelect
                   />
                 </div>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Access Key
-                  </label>
-                  <div className="relative">
-                    <Key className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <input
-                      type="password"
-                      value={patientKey}
-                      onChange={(e) => {
-                        setPatientKey(e.target.value);
-                        setSearchError('');
-                      }}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter Patient Access Key"
-                    />
-                  </div>
-                </div>
+                
                 
                 {searchError && (
                   <div className="flex items-center space-x-2 text-red-600 bg-red-50 p-3 rounded-lg">

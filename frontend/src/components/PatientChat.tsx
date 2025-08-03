@@ -1,6 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Send, User, Bot, AlertTriangle, Heart, Pill, Shield } from 'lucide-react';
-import { Patient } from '../App';
+import React, { useState, useEffect, useRef } from "react";
+import {
+  ArrowLeft,
+  Send,
+  User,
+  Bot,
+  AlertTriangle,
+  Heart,
+  Pill,
+  Shield,
+} from "lucide-react";
+import { Patient } from "../App";
 
 interface PatientChatProps {
   patient: Patient;
@@ -10,13 +19,13 @@ interface PatientChatProps {
 interface Message {
   id: string;
   text: string;
-  sender: 'user' | 'bot';
+  sender: "user" | "bot";
   timestamp: Date;
 }
 
 const PatientChat: React.FC<PatientChatProps> = ({ patient, onBack }) => {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [inputMessage, setInputMessage] = useState('');
+  const [inputMessage, setInputMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -31,72 +40,70 @@ const PatientChat: React.FC<PatientChatProps> = ({ patient, onBack }) => {
   useEffect(() => {
     // Initial greeting from the AI bot
     const initialMessage: Message = {
-      id: '1',
+      id: "1",
       text: `Hello! I'm ${patient.name}'s AI assistant. I have access to all of ${patient.name}'s medical records and can help you with any questions about their medical history, allergies, medications, and conditions. What would you like to know?`,
-      sender: 'bot',
-      timestamp: new Date()
+      sender: "bot",
+      timestamp: new Date(),
     };
     setMessages([initialMessage]);
   }, [patient]);
 
-//  
+  //
 
+  const fetchBotResponse = async (query: string): Promise<string> => {
+    try {
+      const response = await fetch(
+        "https://gd2r2h51-8000.inc1.devtunnels.ms/query/",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ query, user_id: patient.id }),
+        }
+      );
 
-const fetchBotResponse = async (query: string): Promise<string> => {
-  try {
-    const response = await fetch(
-      "https://gd2r2h51-8000.inc1.devtunnels.ms/query/",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ query }),
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
       }
-    );
 
-    if (!response.ok) {
-      throw new Error(`Server error: ${response.status}`);
+      const data = await response.json();
+      return data.response || "Sorry, I could not understand the question.";
+    } catch (error) {
+      console.error("Error fetching bot response:", error);
+      return "There was an error retrieving information. Please try again later.";
     }
-
-    const data = await response.json();
-    return data.response || "Sorry, I could not understand the question.";
-  } catch (error) {
-    console.error("Error fetching bot response:", error);
-    return "There was an error retrieving information. Please try again later.";
-  }
-};
-
-const handleSendMessage = async () => {
-  if (!inputMessage.trim()) return;
-
-  const userMessage: Message = {
-    id: Date.now().toString(),
-    text: inputMessage,
-    sender: "user",
-    timestamp: new Date(),
   };
 
-  setMessages((prev) => [...prev, userMessage]);
-  setInputMessage("");
-  setIsTyping(true);
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim()) return;
 
-  const responseText = await fetchBotResponse(inputMessage);
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      text: inputMessage,
+      sender: "user",
+      timestamp: new Date(),
+    };
 
-  const botMessage: Message = {
-    id: (Date.now() + 1).toString(),
-    text: responseText,
-    sender: "bot",
-    timestamp: new Date(),
+    setMessages((prev) => [...prev, userMessage]);
+    setInputMessage("");
+    setIsTyping(true);
+
+    const responseText = await fetchBotResponse(inputMessage);
+
+    const botMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      text: responseText,
+      sender: "bot",
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, botMessage]);
+    setIsTyping(false);
   };
-
-  setMessages((prev) => [...prev, botMessage]);
-  setIsTyping(false);
-};
-
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
@@ -116,7 +123,7 @@ const handleSendMessage = async () => {
                 <ArrowLeft className="h-5 w-5" />
                 <span>Back to Dashboard</span>
               </button>
-              
+
               <div className="border-l border-gray-300 pl-4">
                 <div className="flex items-center space-x-3">
                   <div className="bg-blue-100 p-2 rounded-full">
@@ -133,10 +140,12 @@ const handleSendMessage = async () => {
                 </div>
               </div>
             </div>
-            
+
             <div className="flex items-center space-x-2 bg-green-100 px-3 py-1 rounded-full">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-sm font-medium text-green-800">AI Active</span>
+              <span className="text-sm font-medium text-green-800">
+                AI Active
+              </span>
             </div>
           </div>
         </div>
@@ -159,62 +168,102 @@ const handleSendMessage = async () => {
                 <p className="text-sm text-gray-600">ID: {patient.id}</p>
               </div>
             </div>
-
             <div>
               <h4 className="text-sm font-semibold text-red-600 uppercase tracking-wide mb-3 flex items-center">
                 <AlertTriangle className="h-4 w-4 mr-2" />
                 Allergies
               </h4>
               <div className="space-y-2">
-                {patient.allergies.map((allergy, index) => (
-                  <div key={index} className="bg-red-50 border border-red-200 p-2 rounded text-sm text-red-800">
-                    {allergy}
+                {Array.isArray(patient.allergies) &&
+                patient.allergies.length > 0 ? (
+                  patient.allergies.map((allergy, index) => (
+                    <div
+                      key={index}
+                      className="bg-red-50 border border-red-200 p-2 rounded text-sm text-red-800"
+                    >
+                      {allergy}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-sm text-gray-500">
+                    No allergies found
                   </div>
-                ))}
+                )}
               </div>
             </div>
-
             <div>
               <h4 className="text-sm font-semibold text-blue-600 uppercase tracking-wide mb-3 flex items-center">
                 <Pill className="h-4 w-4 mr-2" />
                 Medications
               </h4>
               <div className="space-y-2">
-                {patient.medications.map((medication, index) => (
-                  <div key={index} className="bg-blue-50 border border-blue-200 p-2 rounded text-sm text-blue-800">
-                    {medication}
+                {patient.medications.length > 0 ? (
+                  patient.medications.map((medication, index) => (
+                    <div
+                      key={index}
+                      className="bg-blue-50 border border-blue-200 p-2 rounded text-sm text-blue-800"
+                    >
+                      <div className="font-semibold">{medication.name}</div>
+                      <div>Dosage: {medication.dosage}</div>
+                      <div>Frequency: {medication.frequency}</div>
+                      <div>Duration: {medication.duration}</div>
+                      <div>Purpose: {medication.purpose}</div>
+                      {medication.end_date && (
+                        <div>End Date: {medication.end_date}</div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-sm text-gray-500">
+                    No medications found
                   </div>
-                ))}
+                )}
               </div>
             </div>
-
-            <div>
-              <h4 className="text-sm font-semibold text-purple-600 uppercase tracking-wide mb-3 flex items-center">
-                <Heart className="h-4 w-4 mr-2" />
-                Conditions
-              </h4>
-              <div className="space-y-2">
-                {patient.conditions.map((condition, index) => (
-                  <div key={index} className="bg-purple-50 border border-purple-200 p-2 rounded text-sm text-purple-800">
-                    {condition}
-                  </div>
-                ))}
-              </div>
-            </div>
-
             <div>
               <h4 className="text-sm font-semibold text-green-600 uppercase tracking-wide mb-3 flex items-center">
                 <Shield className="h-4 w-4 mr-2" />
                 Vaccines
               </h4>
               <div className="space-y-2">
-                {patient.vaccines.map((vaccine, index) => (
-                  <div key={index} className="bg-green-50 border border-green-200 p-2 rounded text-sm text-green-800">
-                    {vaccine}
+                {patient.vaccinations.length > 0 ? (
+                  patient.vaccinations.map((vaccine, index) => (
+                    <div
+                      key={index}
+                      className="bg-green-50 border border-green-200 p-2 rounded text-sm text-green-800"
+                    >
+                      <div className="font-semibold">{vaccine.name}</div>
+                      <div>Dosage: {vaccine.dosage}</div>
+                      <div>Schedule: {vaccine.schedule}</div>
+                      <div>Duration: {vaccine.duration}</div>
+                      {vaccine.end_date && (
+                        <div>End Date: {vaccine.end_date}</div>
+                      )}
+                      {vaccine.notes && <div>Notes: {vaccine.notes}</div>}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-sm text-gray-500">No vaccines found</div>
+                )}
+              </div>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-purple-600 uppercase tracking-wide mb-3 flex items-center">
+                <Heart className="h-4 w-4 mr-2" />
+                Conditions
+              </h4>
+              <div className="space-y-2">
+                {patient.medical_conditions.map((condition, index) => (
+                  <div
+                    key={index}
+                    className="bg-purple-50 border border-purple-200 p-2 rounded text-sm text-purple-800"
+                  >
+                    {condition}
                   </div>
                 ))}
               </div>
             </div>
+            
           </div>
         </div>
 
@@ -225,34 +274,48 @@ const handleSendMessage = async () => {
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex ${
+                  message.sender === "user" ? "justify-end" : "justify-start"
+                }`}
               >
                 <div
                   className={`max-w-3xl rounded-lg p-4 ${
-                    message.sender === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white border border-gray-200'
+                    message.sender === "user"
+                      ? "bg-blue-600 text-white"
+                      : "bg-white border border-gray-200"
                   }`}
                 >
                   <div className="flex items-start space-x-3">
-                    <div className={`p-1 rounded-full ${
-                      message.sender === 'user' ? 'bg-blue-500' : 'bg-gray-100'
-                    }`}>
-                      {message.sender === 'user' ? (
+                    <div
+                      className={`p-1 rounded-full ${
+                        message.sender === "user"
+                          ? "bg-blue-500"
+                          : "bg-gray-100"
+                      }`}
+                    >
+                      {message.sender === "user" ? (
                         <User className="h-4 w-4 text-white" />
                       ) : (
                         <Bot className="h-4 w-4 text-gray-600" />
                       )}
                     </div>
                     <div className="flex-1">
-                      <p className={`whitespace-pre-wrap ${
-                        message.sender === 'user' ? 'text-white' : 'text-gray-900'
-                      }`}>
+                      <p
+                        className={`whitespace-pre-wrap ${
+                          message.sender === "user"
+                            ? "text-white"
+                            : "text-gray-900"
+                        }`}
+                      >
                         {message.text}
                       </p>
-                      <p className={`text-xs mt-2 ${
-                        message.sender === 'user' ? 'text-blue-200' : 'text-gray-500'
-                      }`}>
+                      <p
+                        className={`text-xs mt-2 ${
+                          message.sender === "user"
+                            ? "text-blue-200"
+                            : "text-gray-500"
+                        }`}
+                      >
                         {message.timestamp.toLocaleTimeString()}
                       </p>
                     </div>
@@ -260,7 +323,7 @@ const handleSendMessage = async () => {
                 </div>
               </div>
             ))}
-            
+
             {isTyping && (
               <div className="flex justify-start">
                 <div className="max-w-3xl bg-white border border-gray-200 rounded-lg p-4">
@@ -270,8 +333,14 @@ const handleSendMessage = async () => {
                     </div>
                     <div className="flex space-x-1">
                       <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                      <div
+                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                        style={{ animationDelay: "0.1s" }}
+                      ></div>
+                      <div
+                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                        style={{ animationDelay: "0.2s" }}
+                      ></div>
                     </div>
                   </div>
                 </div>

@@ -39,57 +39,30 @@ const PatientChatBot: React.FC<PatientChatBotProps> = ({ user, onBack }) => {
     setMessages([initialMessage]);
   }, [user]);
 
-  const generateBotResponse = (userMessage: string): string => {
-    const message = userMessage.toLowerCase();
-    
-    if (message.includes('symptom') || message.includes('feel') || message.includes('pain')) {
-      return `I can help you track and understand your symptoms. Based on your current symptom log, you have ${user.symptoms.filter(s => !s.endDate).length} active symptoms. Would you like me to help you log a new symptom or discuss your existing ones? Remember, if you're experiencing severe symptoms, please contact your healthcare provider immediately.`;
-    }
-    
-    if (message.includes('medication') || message.includes('drug') || message.includes('prescription')) {
-      const medications = user.medicalRecords.filter(r => r.category === 'medication');
-      if (medications.length > 0) {
-        return `Based on your records, I can see information about your medications. Always take medications as prescribed by your doctor. If you have questions about dosage, side effects, or interactions, please consult with your healthcare provider or pharmacist.`;
+const fetchBotResponse = async (query: string): Promise<string> => {
+  try {
+    const response = await fetch(
+      "https://gd2r2h51-8000.inc1.devtunnels.ms/query/",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ query, user_id: user.id }),
       }
-      return `I don't see any medication records in your profile yet. You can upload your prescription information in the "Upload Records" section. For any medication questions, always consult with your healthcare provider.`;
-    }
-    
-    if (message.includes('allerg') || message.includes('reaction')) {
-      const allergies = user.medicalRecords.filter(r => r.category === 'allergy');
-      if (allergies.length > 0) {
-        return `I can see you have allergy information in your records. It's important to always inform healthcare providers about your allergies before any treatment. Make sure to carry this information with you, especially in emergency situations.`;
-      }
-      return `I don't see any allergy information in your records. If you have known allergies, please add them to your medical records. This information is crucial for your safety during medical treatments.`;
-    }
-    
-    if (message.includes('appointment') || message.includes('doctor') || message.includes('visit')) {
-      return `You have ${user.appointments.length} upcoming appointments in your calendar. Regular check-ups are important for maintaining good health. Would you like me to help you prepare questions for your next doctor visit?`;
-    }
-    
-    if (message.includes('emergency') || message.includes('urgent') || message.includes('serious')) {
-      return `⚠️ If you're experiencing a medical emergency, please call emergency services immediately (911 in the US) or go to the nearest emergency room. I'm here to provide general health information, but I cannot replace professional medical care in urgent situations.`;
-    }
-    
-    if (message.includes('record') || message.includes('history')) {
-      return `You currently have ${user.medicalRecords.length} medical records in your profile. Keeping comprehensive medical records helps healthcare providers give you better care. You can upload new records anytime using the "Upload Records" feature.`;
-    }
-    
-    if (message.includes('help') || message.includes('what can you do')) {
-      return `I can help you with:
-      
-• Understanding your medical records and history
-• Tracking and discussing symptoms
-• Reminding you about appointments and medications
-• Providing general health information
-• Preparing for doctor visits
-• Managing your health calendar
+    );
 
-What would you like to know more about?`;
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status}`);
     }
-    
-    return `I'm here to help with your health-related questions! I can discuss your medical records, symptoms, appointments, and provide general health guidance. What specific information would you like to know about your health?`;
-  };
 
+    const data = await response.json();
+    return data.response || "Sorry, I could not understand the question.";
+  } catch (error) {
+    console.error("Error fetching bot response:", error);
+    return "There was an error retrieving information. Please try again later.";
+  }
+};
   const handleSendMessage = async () => {
     if (!inputMessage.trim()) return;
 
@@ -105,10 +78,10 @@ What would you like to know more about?`;
     setIsTyping(true);
 
     // Simulate AI thinking time
-    setTimeout(() => {
+    setTimeout(async () => {
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: generateBotResponse(inputMessage),
+        text: await fetchBotResponse(inputMessage),
         sender: 'bot',
         timestamp: new Date()
       };

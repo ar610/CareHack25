@@ -56,11 +56,12 @@ export type Patient = {
   age: number;
   allergies: string[];
   medications: string[];
-  conditions: string[];
-  vaccines: string[];
+  medical_conditions: string[];
+  vaccinations: string[];
   emergencyContact: string;
   lastAccessed: string;
 };
+// 
 
 export type MedicalRecord = {
   url: any;

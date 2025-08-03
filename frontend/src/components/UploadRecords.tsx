@@ -59,7 +59,18 @@ const UploadRecords: React.FC<UploadRecordsProps> = ({ user, onBack }) => {
       body: formData,
     });
 
-    if (!res.ok) {
+    const end2 = await fetch(
+      `https://gd2r2h51-8000.inc1.devtunnels.ms/upload/${user.id}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ file }),
+      }
+    );
+
+    if (!res.ok && !end2.ok) {
       const errorDetails = await res.json();
       console.error("Upload failed:", errorDetails);
       throw new Error(errorDetails.error.message || "Cloudinary upload failed");
