@@ -39,75 +39,61 @@ const PatientChat: React.FC<PatientChatProps> = ({ patient, onBack }) => {
     setMessages([initialMessage]);
   }, [patient]);
 
-  const generateBotResponse = (userMessage: string): string => {
-    const message = userMessage.toLowerCase();
-    
-    if (message.includes('allerg')) {
-      return `${patient.name} has the following allergies: ${patient.allergies.join(', ')}. Please note these carefully when prescribing medications or treatments.`;
-    }
-    
-    if (message.includes('medication') || message.includes('drug') || message.includes('prescription')) {
-      return `Current medications for ${patient.name}: ${patient.medications.join(', ')}. These were last updated in their medical records.`;
-    }
-    
-    if (message.includes('condition') || message.includes('diagnosis') || message.includes('medical history')) {
-      return `${patient.name} has been diagnosed with: ${patient.conditions.join(', ')}. These are their primary medical conditions on record.`;
-    }
-    
-    if (message.includes('vaccine') || message.includes('immunization')) {
-      return `Vaccination record for ${patient.name}: ${patient.vaccines.join(', ')}. Their immunizations appear to be up to date.`;
-    }
-    
-    if (message.includes('emergency') || message.includes('contact')) {
-      return `Emergency contact for ${patient.name}: ${patient.emergencyContact}. This person should be notified in case of emergencies.`;
-    }
-    
-    if (message.includes('age')) {
-      return `${patient.name} is ${patient.age} years old.`;
-    }
-    
-    if (message.includes('summary') || message.includes('overview')) {
-      return `Here's a summary for ${patient.name} (Age ${patient.age}):
-      
-• Allergies: ${patient.allergies.join(', ')}
-• Current Medications: ${patient.medications.join(', ')}
-• Medical Conditions: ${patient.conditions.join(', ')}
-• Vaccinations: ${patient.vaccines.join(', ')}
-• Emergency Contact: ${patient.emergencyContact}
+//  
 
-Is there anything specific you'd like me to elaborate on?`;
+
+const fetchBotResponse = async (query: string): Promise<string> => {
+  try {
+    const response = await fetch(
+      "https://gd2r2h51-8000.inc1.devtunnels.ms/query/",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ query }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status}`);
     }
-    
-    return `I can help you with information about ${patient.name}'s medical records. You can ask me about their allergies, medications, medical conditions, vaccines, or emergency contacts. What specific information do you need?`;
+
+    const data = await response.json();
+    return data.response || "Sorry, I could not understand the question.";
+  } catch (error) {
+    console.error("Error fetching bot response:", error);
+    return "There was an error retrieving information. Please try again later.";
+  }
+};
+
+const handleSendMessage = async () => {
+  if (!inputMessage.trim()) return;
+
+  const userMessage: Message = {
+    id: Date.now().toString(),
+    text: inputMessage,
+    sender: "user",
+    timestamp: new Date(),
   };
 
-  const handleSendMessage = async () => {
-    if (!inputMessage.trim()) return;
+  setMessages((prev) => [...prev, userMessage]);
+  setInputMessage("");
+  setIsTyping(true);
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: inputMessage,
-      sender: 'user',
-      timestamp: new Date()
-    };
+  const responseText = await fetchBotResponse(inputMessage);
 
-    setMessages(prev => [...prev, userMessage]);
-    setInputMessage('');
-    setIsTyping(true);
-
-    // Simulate AI thinking time
-    setTimeout(() => {
-      const botResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        text: generateBotResponse(inputMessage),
-        sender: 'bot',
-        timestamp: new Date()
-      };
-      
-      setMessages(prev => [...prev, botResponse]);
-      setIsTyping(false);
-    }, 1000 + Math.random() * 1000);
+  const botMessage: Message = {
+    id: (Date.now() + 1).toString(),
+    text: responseText,
+    sender: "bot",
+    timestamp: new Date(),
   };
+
+  setMessages((prev) => [...prev, botMessage]);
+  setIsTyping(false);
+};
+
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
